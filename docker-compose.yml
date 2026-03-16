@@ -1,0 +1,67 @@
+services:
+  order-processor-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL:-jdbc:mysql://mysql-db:3306/orderdb?useSSL=false&allowPublicKeyRetrieval=true}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME:-user}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD:-password}
+      SPRING_RABBITMQ_HOST: ${SPRING_RABBITMQ_HOST:-rabbitmq}
+      SPRING_RABBITMQ_PORT: ${SPRING_RABBITMQ_PORT:-5672}
+      SPRING_RABBITMQ_USERNAME: ${SPRING_RABBITMQ_USERNAME:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${SPRING_RABBITMQ_PASSWORD:-guest}
+      APP_RABBITMQ_ORDER_EXCHANGE: ${APP_RABBITMQ_ORDER_EXCHANGE:-order.events}
+      APP_RABBITMQ_ORDER_QUEUE: ${APP_RABBITMQ_ORDER_QUEUE:-order.placed.queue}
+      APP_RABBITMQ_ORDER_ROUTING_KEY: ${APP_RABBITMQ_ORDER_ROUTING_KEY:-order.placed}
+      APP_RABBITMQ_PROCESSED_ROUTING_KEY: ${APP_RABBITMQ_PROCESSED_ROUTING_KEY:-order.processed}
+      APP_RABBITMQ_DLX_EXCHANGE: ${APP_RABBITMQ_DLX_EXCHANGE:-dlx.order.events}
+      APP_RABBITMQ_DLQ_QUEUE: ${APP_RABBITMQ_DLQ_QUEUE:-order.dlq}
+      APP_ORDER_MAX_RETRIES: ${APP_ORDER_MAX_RETRIES:-3}
+    depends_on:
+      mysql-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  mysql-db:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: orderdb
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+    volumes:
+      - ./db_init:/docker-entrypoint-initdb.d
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql-data:
